@@ -1,0 +1,248 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   ReturnShield AI — White & Ocean Blue Theme with Times New Roman Typography
+   ========================================================================== */
+
+/* Universal Times New Roman Typography */
+*, *::before, *::after, html, body, input, select, textarea, button, p, span, h1, h2, h3, h4, h5, h6, table, th, td, a {
+  font-family: 'Times New Roman', Times, Georgia, serif !important;
+}
+
+/* Base Body: Light Ocean Canvas */
+body {
+  background-color: #f0f7fc;
+  color: #0a2540;
+  min-height: 100vh;
+}
+
+/* Custom Ocean Scrollbar */
+::-webkit-scrollbar { 
+  width: 7px; 
+  height: 7px;
+}
+::-webkit-scrollbar-track { 
+  background: #e0f2fe; 
+}
+::-webkit-scrollbar-thumb { 
+  background: #0284c7; 
+  border-radius: 4px; 
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #0369a1;
+}
+
+/* ==========================================================================
+   Surface Palette Overrides for White & Ocean Blue Design
+   ========================================================================== */
+
+/* Main canvas background: Light Ocean Foam */
+.bg-slate-900 {
+  background-color: #f0f7fc !important;
+}
+
+/* Card & panel surfaces: Crisp Pure White with subtle Ocean Shadow */
+.bg-slate-800 {
+  background-color: #ffffff !important;
+  box-shadow: 0 4px 20px -2px rgba(2, 132, 199, 0.08);
+}
+
+/* Secondary light surfaces & sub-cards */
+.bg-slate-900\/60,
+.bg-slate-900\/40,
+.bg-slate-900\/80,
+.bg-slate-900\/20 {
+  background-color: #f0f8ff !important;
+  border-color: #bae6fd !important;
+}
+
+/* Subtle highlights & hover */
+.hover\:bg-slate-700:hover,
+.hover\:bg-slate-700\/50:hover,
+.hover\:bg-slate-700\/40:hover,
+.hover\:bg-slate-700\/30:hover,
+.hover\:bg-slate-700\/20:hover {
+  background-color: #e0f2fe !important;
+}
+
+/* Borders: Light Ocean Blue */
+.border-slate-700,
+.border-slate-600,
+.border-slate-800,
+.border-slate-700\/80,
+.border-slate-700\/60,
+.border-slate-700\/40,
+.border-slate-700\/50,
+.border-slate-700\/30 {
+  border-color: #bae6fd !important;
+}
+
+/* Table divider lines */
+.divide-slate-700\/60 > :not([hidden]) ~ :not([hidden]),
+.divide-slate-700\/40 > :not([hidden]) ~ :not([hidden]),
+.divide-slate-700 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #e0f2fe !important;
+}
+
+/* ==========================================================================
+   Typography & Contrast on White/Light Ocean Surfaces
+   ========================================================================== */
+
+/* Headings: Deep Ocean Navy */
+h1, h2, h3, h4, h5, h6 {
+  color: #002b49;
+}
+
+/* Headings with explicit text-white on light cards */
+.bg-slate-800 h1,
+.bg-slate-800 h2,
+.bg-slate-800 h3,
+.bg-slate-800 h4,
+.bg-slate-900 h1,
+.bg-slate-900 h2,
+.bg-slate-900 h3,
+.bg-slate-900 h4,
+h1.text-white,
+h2.text-white,
+h3.text-white,
+h4.text-white {
+  color: #002b49 !important;
+}
+
+/* Numbers and metrics with text-white on white cards */
+.bg-slate-800 .text-white,
+.bg-slate-900 .text-white,
+.stat-value.text-white {
+  color: #0a2540 !important;
+}
+
+/* Secondary & body labels: Clean Ocean Slate */
+.text-slate-400 {
+  color: #3b5a7a !important;
+}
+.text-slate-300 {
+  color: #1a365d !important;
+}
+.text-slate-200 {
+  color: #0c2340 !important;
+}
+.text-slate-500 {
+  color: #55789b !important;
+}
+
+/* Table Headers & Cells */
+table thead tr {
+  background-color: #e6f4fb !important;
+  border-bottom: 2px solid #bae6fd !important;
+}
+table th {
+  color: #002b49 !important;
+  font-weight: 700 !important;
+}
+table tbody tr {
+  background-color: #ffffff;
+  border-bottom: 1px solid #e0f2fe !important;
+}
+table tbody tr:hover {
+  background-color: #f0f9ff !important;
+}
+table td {
+  color: #1e3a5f;
+}
+table td .text-white {
+  color: #002b49 !important;
+  font-weight: 600;
+}
+
+/* Form Inputs, Selects, Textareas */
+input, select, textarea {
+  background-color: #ffffff !important;
+  color: #0a2540 !important;
+  border: 1px solid #bae6fd !important;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: #0284c7 !important;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.25) !important;
+  outline: none !important;
+}
+input::placeholder, textarea::placeholder {
+  color: #648dae !important;
+}
+
+/* Preserve White Text on Solid Color Buttons & Badges */
+button.bg-blue-600,
+button.bg-blue-600 *,
+button.bg-blue-700,
+button.bg-blue-700 *,
+button.bg-sky-600,
+button.bg-sky-600 *,
+button.bg-sky-700,
+button.bg-sky-700 *,
+button.bg-red-600,
+button.bg-red-600 *,
+button.bg-emerald-600,
+button.bg-emerald-600 *,
+.btn-primary,
+.btn-primary * {
+  color: #ffffff !important;
+}
+
+/* Recharts Tooltip Styling */
+.recharts-default-tooltip {
+  background-color: #ffffff !important;
+  border: 1px solid #bae6fd !important;
+  box-shadow: 0 6px 20px rgba(2, 132, 199, 0.15) !important;
+  border-radius: 8px !important;
+}
+.recharts-tooltip-item,
+.recharts-tooltip-label {
+  color: #0a2540 !important;
+}
+
+/* ==========================================================================
+   Ocean Blue Sidebar Styling (Deep Ocean Gradient)
+   ========================================================================== */
+.ocean-sidebar {
+  background: linear-gradient(180deg, #00223d 0%, #00192e 100%) !important;
+  border-right: 1px solid #003866 !important;
+  color: #ffffff !important;
+}
+.ocean-sidebar * {
+  color: #bae6fd;
+}
+.ocean-sidebar h1,
+.ocean-sidebar .sidebar-title,
+.ocean-sidebar .text-white,
+.ocean-sidebar p.text-white,
+.ocean-sidebar span.text-white {
+  color: #ffffff !important;
+}
+.ocean-sidebar a {
+  color: #bae6fd !important;
+  transition: all 0.15s ease-in-out;
+}
+.ocean-sidebar a:hover {
+  background-color: rgba(2, 132, 199, 0.25) !important;
+  color: #ffffff !important;
+}
+.ocean-sidebar a.active,
+.ocean-sidebar a[class*="bg-blue-600"] {
+  background-color: #0284c7 !important;
+  border-color: #38bdf8 !important;
+  color: #ffffff !important;
+}
+.ocean-sidebar a.active * {
+  color: #ffffff !important;
+}
+.ocean-sidebar .sidebar-footer {
+  background-color: #001426 !important;
+  border-top: 1px solid #00335c !important;
+}
+.ocean-sidebar .sidebar-footer * {
+  color: #93c5fd;
+}
+.ocean-sidebar .sidebar-footer p.text-white {
+  color: #ffffff !important;
+}
