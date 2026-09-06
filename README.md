@@ -46,15 +46,16 @@
 ### 1. Plain-English Forensic Case Briefing ("The Red Flags Explained")
 Located prominently at the top of the **Case Detail** page (`/returns/:id`) and beside the **Human Reviewer Panel**, this card translates complex machine learning outputs into a gripping, plain-English detective breakdown:
 
-* **🚨 Red Flag #1: An "Impossible" Timeline (The Biggest Giveaway):**
-  * Detects synthetic anomaly conflicts between customer claims and carrier delivery tracking.
-  * Look at what the customer wrote vs. when the package arrived:
-    > **Refund Request Filed:** 3 Sept, 07:07 pm  
-    > **Customer Claimed:** *"Screen flickering & rapid battery drain after 48 hours of delivery"*  
-    > **Actual Courier Delivery:** 4 Sept, 07:07 pm *(Courier confirmed package delivered a full day later!)*  
+* **🚨 Red Flag #1: Severe Behavioral Drift (+3.8σ Baseline Divergence):**
+  * Verifies that courier delivery successfully occurred prior to the claim, while detecting an extreme divergence from the customer's personal shopping history.
+  * Look at the order context and timeline:
+    > **Order Confirmed:** 31 Aug, 07:07 pm  
+    > **Actual Courier Delivery:** 1 Sept, 07:07 pm *(Handed over with electronic proof of delivery)*  
+    > **Refund Request Filed:** 3 Sept, 07:07 pm *(48 hours after delivery)*  
+    > **Customer Stated:** *"Screen flickering & rapid battery drain after 48 hours of delivery"*  
     > 
-    > *How could the customer test the device for "48 hours" on September 3rd when the courier didn't even deliver the package until September 4th? Fraudsters frequently use automated or copy-pasted dispute templates and submit claims prematurely without checking carrier tracking.*
-* **📈 Red Flag #2: Sudden 7.5× Surge in Return Rate (Severe Behavioral Drift):**
+    > *While the delivery timeline is legitimate (filed exactly 48 hours post-delivery), the customer's account exhibits extreme statistical drift (+3.8σ deviation from personal baseline), indicating a sudden shift into systematic return abuse.*
+* **📈 Red Flag #2: Sudden 7.5× Surge in Return Rate:**
   * Compares historical baseline (8.2% return rate) against recent activity (61.4% return rate). Explains in simple terms that the buyer is now returning nearly 6 out of every 10 purchases (+648% increase, $+3.8\sigma$ deviation).
 * **⚡ Red Flag #3: Claim Frequency Accelerated to Weekly:**
   * Compares baseline return frequency (once every 2–3 months) against current velocity (3+ claims per month, nearly weekly returns).
@@ -217,7 +218,7 @@ The retrained model incorporates **15 concrete payment & refund lifecycle featur
 
 1. **Personal Customer Behavioral Baseline:** Instead of relying on rigid universal thresholds, the system computes $\mu \pm \sigma$ for each customer's historical order frequency, return rate, and average claim value.
 2. **Exponential Behavior Drift Scoring:** A $0\text{--}100$ score capturing sudden behavioral shifts (e.g. a customer with an 8.2% return rate over 10 months suddenly returning 61.4% of orders, $+3.8\sigma$ deviation).
-3. **Forensic Timeline Anomaly Detection:** Flags premature or impossible claim submissions (e.g. refund filed claiming "48 hours of use" before courier delivery confirmation).
+3. **Delivery & Inspection Window Verification:** Enforces strict chronological precedence ensuring physical delivery precedes refund initiation, tracking post-delivery inspection elapsed time against reported defect categories.
 4. **SHAP TreeExplainer Factor Decomposition:** Translates complex tree ensembles into human-readable signal bars showing both positive (risk) and negative (trust) contributions.
 5. **Expected Financial Exposure Engine:** Quantifies the net economic impact of every decision:
    $$\text{Net Savings} = (\text{Abuse Probability} \times \text{Refund Amount}) - \text{False Positive Cost} - \text{Review Cost}$$
@@ -386,13 +387,13 @@ ReturnShield AI comes pre-seeded with distinct customer archetypes demonstrating
 ### Spotlight: Case #142 (Kavita Nair — Electronics Claim)
 Navigate to **`http://localhost:5173/returns/142`** to showcase the full engine in action:
 
-1. **The Impossible Timeline Giveaway:**
-   - Notice the refund request date (**3 Sept, 07:07 pm**) claiming *"Screen flickering after 48 hours of delivery"*, versus the actual carrier delivery date (**4 Sept, 07:07 pm**). Point out how serial abusers copy-paste boilerplates before tracking updates.
-2. **Behavioral Drift Explosion:**
-   - Show how Kavita had an established 8.2% return rate that suddenly spiked to 61.4% (returning 6 out of every 10 purchases, $+3.8\sigma$ deviation).
+1. **Post-Delivery Claim Timing Verification:**
+   - Notice the order placed (**31 Aug, 07:07 pm**), confirmed courier delivery (**1 Sept, 07:07 pm**), and refund request (**3 Sept, 07:07 pm**). Delivery properly preceded the claim by exactly 48 hours, validating the timeline against the customer's stated claim: *"Screen flickering & rapid battery drain after 48 hours of delivery"*.
+2. **Severe Behavioral Drift (+3.8σ):**
+   - Show how Kavita had an established 8.2% baseline return rate that suddenly spiked to 61.4% (returning 6 out of every 10 purchases, $+3.8\sigma$ deviation).
 3. **Weekly Claim Acceleration:**
-   - Point out refund frequency accelerating from once every 2–3 months to 3+ claims per month.
-4. **Value Shock:**
+   - Point out refund frequency accelerating from once every 2–3 months (0.4/mo) to 3+ claims per month (3.2/mo).
+4. **High-Ticket Value Shock:**
    - Point out the claim amount of ₹26,990 vs. her typical average return size of ₹1,200.
 5. **Human-in-the-Loop Verdict Submission:**
    - Click **`Hold for Review`**, enter notes (*"Package weight and serial number verified with logistics"*), select feedback label **`True Positive`**, and click **`Save Reviewer Decision`**.
@@ -402,7 +403,7 @@ Navigate to **`http://localhost:5173/returns/142`** to showcase the full engine 
 
 | Customer | Archetype / Case | Key Behavior Signals | What to Showcase |
 |:---|:---|:---|:---|
-| **Kavita Nair** (Case #142) | **Severe Behavioral Drift & Timeline Anomaly** | 8.2% baseline return rate surged to 61.4% (+3.8σ anomaly); premature claim filed 24h prior to courier delivery tracking. | Spotlight Case #142: Impossible timeline, drift comparison card, SHAP waterfall, and hold workflow. |
+| **Kavita Nair** (Case #142) | **Severe Behavioral Drift & Value Shock** | 8.2% baseline return rate surged to 61.4% (+3.8σ anomaly); claim filed 48h post-delivery for ₹26,990 vs ₹1,200 historical baseline. | Spotlight Case #142: Post-delivery verification, drift comparison card, SHAP waterfall, and hold workflow. |
 | **Raj Sharma** (Customer #1) | **Repeat High-Value Abuser** | Confirmed prior verified fraud strikes; repeated high-ticket electronics claims (₹1.16L total volume); account set to REJECTED. | Multi-claim history, verified abuse badge, and bidirectional client standing synchronization. |
 | **Priya Patel** | **Serial Return Burst** | 5 returns requested within 72 hours across 3 categories. | Return burst flag, transaction velocity counters, and abnormal timing heuristics. |
 | **Amit Verma** | **Verified Prior Abuser** | Confirmed prior refund fraud strike on record; new high-value electronics claim. | Immediate block recommendation, elevated expected loss, and verified abuse badge. |

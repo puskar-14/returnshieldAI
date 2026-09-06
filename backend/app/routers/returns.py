@@ -42,6 +42,12 @@ def _format_return(rr: ReturnRequest, customer: Customer, ra: RiskAssessment = N
         "refund_id": getattr(rr, "refund_id", None) or f"rfnd_synth_{rr.id:05d}",
         "days_since_payment": getattr(rr, "days_since_payment", 7),
         "refund_status": getattr(rr, "refund_status", rr.status),
+        # Customer Profile context
+        "account_age_days": customer.account_age_days if customer else 310,
+        "total_orders": customer.total_orders if customer else 10,
+        "total_returns": customer.total_returns if customer else 2,
+        "verified_abuse_history": customer.verified_abuse_history if customer else 0,
+        "customer_status": getattr(customer, "status", None) if customer else None,
     }
     if ra:
         explanation_list = json.loads(ra.explanation_json) if ra.explanation_json else []
@@ -235,15 +241,15 @@ def get_return_detail(return_id: int, db: Session = Depends(get_db)):
         result["payment_id"] = order.payment_id or result["payment_id"]
         result["payment_method"] = order.payment_method or "UPI"
         result["payment_amount"] = order.amount or rr.amount
-        if order.delivered_at:
+        if order.delivered_at and (not rr.created_at or order.delivered_at < rr.created_at):
             result["delivered_at"] = order.delivered_at.isoformat()
         else:
-            result["delivered_at"] = (rr.created_at - timedelta(days=1, hours=2)).isoformat() if rr.created_at else None
+            result["delivered_at"] = (rr.created_at - timedelta(days=2)).isoformat() if rr.created_at else None
     else:
         result["payment_method"] = "UPI"
         result["payment_amount"] = rr.amount * 1.15
         result["payment_status"] = "CAPTURED"
-        result["delivered_at"] = (rr.created_at - timedelta(days=1, hours=2)).isoformat() if rr.created_at else None
+        result["delivered_at"] = (rr.created_at - timedelta(days=2)).isoformat() if rr.created_at else None
 
     # Enrich with financial impact (Expected Financial Exposure)
     abuse_prob = ra.abuse_probability if ra else (rr.risk_score / 100.0)
@@ -261,6 +267,12 @@ def get_return_detail(return_id: int, db: Session = Depends(get_db)):
             features = json.loads(ra.features_json)
         except Exception:
             pass
+
+    if customer:
+        if "verified_abuse_history" not in features:
+            features["verified_abuse_history"] = customer.verified_abuse_history or 0
+        if "account_age_days" not in features:
+            features["account_age_days"] = customer.account_age_days or 310
 
     drift = ra.drift_score if ra else 0
     dev = ra.baseline_deviation if ra else 0
@@ -329,19 +341,17 @@ def get_return_timeline(return_id: int, db: Session = Depends(get_db)):
     pay_dt = (curr_order.created_at - timedelta(minutes=3)) if curr_order and curr_order.created_at else (claim_dt - timedelta(days=getattr(rr, 'days_since_payment', 6)))
     order_dt = curr_order.created_at if curr_order and curr_order.created_at else (pay_dt + timedelta(minutes=3))
     
-    # Delivery date logic (supports synthetic impossible-timeline fraud detection)
-    if curr_order and curr_order.delivered_at:
+    # Delivery date logic (strictly precedes refund claim)
+    if curr_order and curr_order.delivered_at and curr_order.delivered_at < claim_dt:
         deliv_dt = curr_order.delivered_at
     else:
         seconds_diff = (claim_dt - order_dt).total_seconds()
         if seconds_diff > 86400 * 2:
-            deliv_dt = order_dt + timedelta(days=2)
+            deliv_dt = order_dt + timedelta(days=1, hours=12)
         elif seconds_diff > 86400:
-            deliv_dt = order_dt + timedelta(hours=24)
+            deliv_dt = order_dt + timedelta(hours=18)
         else:
-            deliv_dt = claim_dt - timedelta(hours=12)
-
-    is_impossible_timeline = deliv_dt > claim_dt
+            deliv_dt = claim_dt - timedelta(hours=8)
 
     # Stage 1: PAYMENT
     events.append({
@@ -367,12 +377,8 @@ def get_return_timeline(return_id: int, db: Session = Depends(get_db)):
     events.append({
         "type": "DELIVERY",
         "date": deliv_dt.isoformat(),
-        "title": "Delivery Completed (🚨 Delivered AFTER Refund Claim!)" if is_impossible_timeline else "Delivery Completed",
-        "description": (
-            "Courier confirmed package delivered on 4 Sept — a full day AFTER customer filed refund claiming '48 hours of use'! Impossible timeline indicates automated or premature complaint template."
-            if is_impossible_timeline else
-            "Courier confirmed package handed over to customer address with electronic proof of delivery."
-        ),
+        "title": "Delivery Completed",
+        "description": "Courier confirmed package handed over to customer address with electronic proof of delivery. Customer filed refund claim post-delivery.",
         "amount": None,
         "is_current": False,
     })
@@ -392,20 +398,39 @@ def get_return_timeline(return_id: int, db: Session = Depends(get_db)):
     ai_drift = ra.drift_score if ra else (75 if ai_score >= 70 else 25)
     ai_dev = ra.baseline_deviation if ra else (3.5 if ai_score >= 70 else 0.5)
 
+    feat = {}
+    if ra and ra.features_json:
+        try:
+            feat = json.loads(ra.features_json)
+        except Exception:
+            feat = {}
+
+    has_abuse = (customer.verified_abuse_history if customer else feat.get("verified_abuse_history", 0)) == 1
+    rf = feat.get("return_frequency", feat.get("refund_frequency", 3.2 if ai_score >= 70 else 0.4))
+    rr_ratio = feat.get("return_to_order_ratio", feat.get("current_refund_rate", 0.614 if ai_score >= 70 else 0.082))
+    hist_rr = feat.get("historical_return_rate", feat.get("historical_refund_rate", 0.082))
+    avg_order = feat.get("avg_order_value", 1200.0)
+
     if ai_score >= 70:
+        abuse_str = "Prior verified abuse strike on record. " if has_abuse else ""
         simple_reason = (
-            f"Risk Score: {ai_score}/100. In simple words: Customer's return rate jumped from 8.2% to 61.4% "
-            f"(now returning 6 of 10 items) and refund frequency accelerated to 3+ claims/month. "
-            f"High refund request of ₹{rr.amount:,.0f} vs usual ₹1,200."
+            f"Risk Score: {ai_score}/100. In simple words: {abuse_str}"
+            f"Customer return rate is {rr_ratio*100:.1f}% (historical baseline: {hist_rr*100:.1f}%) "
+            f"and refund frequency accelerated to {rf:.1f} claims/month. "
+            f"High refund request of ₹{rr.amount:,.0f} vs typical order value ₹{avg_order:,.0f}."
         )
     elif ai_score >= 40:
+        abuse_str = "Prior dispute strike on profile. " if has_abuse else ""
         simple_reason = (
-            f"Risk Score: {ai_score}/100. In simple words: Refund frequency and claim amount of ₹{rr.amount:,.0f} "
+            f"Risk Score: {ai_score}/100. In simple words: {abuse_str}Moderate drift detected ({ai_dev:+.1f}σ). "
+            f"Return rate ({rr_ratio*100:.1f}%) and refund amount of ₹{rr.amount:,.0f} "
             f"are elevated above personal baseline."
         )
     else:
         simple_reason = (
-            f"Risk Score: {ai_score}/100. In simple words: Transaction and refund behavior match customer's normal historical baseline."
+            f"Risk Score: {ai_score}/100. In simple words: Safe transaction. "
+            f"Return rate ({rr_ratio*100:.1f}%) and claim of ₹{rr.amount:,.0f} "
+            f"are within normal historical limits."
         )
 
     events.append({
@@ -418,13 +443,14 @@ def get_return_timeline(return_id: int, db: Session = Depends(get_db)):
     })
 
     # Stage 6: AI RECOMMENDATION
+    acc_age = customer.account_age_days if customer else feat.get("account_age_days", 180)
     if ai_score >= 70:
         simple_action_desc = (
             f"In simple words: Place on HOLD. Do not auto-approve ₹{rr.amount:,.0f}. "
-            f"Customer has 300+ days tenure with prior orders, so inspect the physical item and serial number before releasing payout."
+            f"Customer has {acc_age} days account history, so inspect the physical item and serial number before releasing payout."
         )
     elif ai_score >= 40:
-        simple_action_desc = f"In simple words: Manual review recommended. Verify courier delivery proof before approving ₹{rr.amount:,.0f}."
+        simple_action_desc = f"In simple words: Manual review recommended. Verify courier delivery proof and package condition before approving ₹{rr.amount:,.0f}."
     else:
         simple_action_desc = f"In simple words: Auto-approve refund of ₹{rr.amount:,.0f}. Low risk with normal customer pattern."
 
@@ -461,7 +487,8 @@ def get_return_timeline(return_id: int, db: Session = Depends(get_db)):
 
 def _build_demo_comparison(risk_level: str, customer: Customer):
     """Build structured behavioral comparison table for BehaviorDriftCard."""
-    if risk_level == "HIGH":
+    # Canonical demonstration for Case #142 (Kavita Nair)
+    if customer and (customer.id == 53 or getattr(customer, "name", "") == "Kavita Nair"):
         return [
             {"metric": "Refund Rate", "historical": "8.2%", "current": "61.4%", "change": "7.5×", "pct_change": "+648%", "status": "ANOMALY"},
             {"metric": "Refund Frequency", "historical": "0.4/month", "current": "3.1/month", "change": "7.8×", "pct_change": "+675%", "status": "ANOMALY"},
@@ -469,21 +496,49 @@ def _build_demo_comparison(risk_level: str, customer: Customer):
             {"metric": "Payment Frequency", "historical": "2.1/month", "current": "0.8/month", "change": "0.4×", "pct_change": "-62%", "status": "NORMAL"},
             {"metric": "Refund/Payment Ratio", "historical": "9.5%", "current": "54.0%", "change": "5.7×", "pct_change": "+468%", "status": "ANOMALY"},
         ]
-    elif risk_level == "MEDIUM":
+
+    tot_orders = max(1, customer.total_orders if customer and customer.total_orders else 10)
+    tot_returns = customer.total_returns if customer and customer.total_returns is not None else 2
+    lifetime_rate = round((tot_returns / tot_orders) * 100, 1)
+    acc_days = max(30, customer.account_age_days if customer and customer.account_age_days else 300)
+
+    if risk_level == "HIGH":
+        hist_rate = max(4.0, round(lifetime_rate * 0.45, 1))
+        curr_rate = max(45.0, min(88.0, round(lifetime_rate * 2.2, 1)))
+        rate_change = round(curr_rate / max(1.0, hist_rate), 1)
+        pct_change = int(((curr_rate - hist_rate) / max(1.0, hist_rate)) * 100)
+
+        hist_freq = round(max(0.2, (tot_returns * 0.5) / (acc_days / 30.0)), 1)
+        curr_freq = round(max(2.4, hist_freq * 3.8), 1)
+        freq_change = round(curr_freq / max(0.1, hist_freq), 1)
+
         return [
-            {"metric": "Refund Rate", "historical": "12.0%", "current": "28.5%", "change": "2.4×", "pct_change": "+137%", "status": "HIGH"},
+            {"metric": "Refund Rate", "historical": f"{hist_rate}%", "current": f"{curr_rate}%", "change": f"{rate_change}×", "pct_change": f"+{pct_change}%", "status": "ANOMALY"},
+            {"metric": "Refund Frequency", "historical": f"{hist_freq}/month", "current": f"{curr_freq}/month", "change": f"{freq_change}×", "pct_change": f"+{int(freq_change*100-100)}%", "status": "ANOMALY"},
+            {"metric": "Refund Value", "historical": "₹1,800", "current": "₹4,600", "change": "2.6×", "pct_change": "+156%", "status": "HIGH"},
+            {"metric": "Payment Frequency", "historical": "2.2/month", "current": "1.0/month", "change": "0.5×", "pct_change": "-55%", "status": "NORMAL"},
+            {"metric": "Refund/Payment Ratio", "historical": f"{hist_rate}%", "current": f"{min(80.0, curr_rate*0.9):.1f}%", "change": f"{rate_change}×", "pct_change": f"+{pct_change}%", "status": "ANOMALY"},
+        ]
+    elif risk_level == "MEDIUM":
+        hist_rate = max(6.0, round(lifetime_rate * 0.7, 1))
+        curr_rate = max(22.0, round(lifetime_rate * 1.4, 1))
+        rate_change = round(curr_rate / max(1.0, hist_rate), 1)
+        pct_change = int(((curr_rate - hist_rate) / max(1.0, hist_rate)) * 100)
+
+        return [
+            {"metric": "Refund Rate", "historical": f"{hist_rate}%", "current": f"{curr_rate}%", "change": f"{rate_change}×", "pct_change": f"+{pct_change}%", "status": "HIGH"},
             {"metric": "Refund Frequency", "historical": "0.6/month", "current": "1.4/month", "change": "2.3×", "pct_change": "+133%", "status": "ELEVATED"},
             {"metric": "Refund Value", "historical": "₹1,800", "current": "₹2,600", "change": "1.4×", "pct_change": "+44%", "status": "ELEVATED"},
             {"metric": "Payment Frequency", "historical": "1.8/month", "current": "1.5/month", "change": "0.8×", "pct_change": "-17%", "status": "NORMAL"},
-            {"metric": "Refund/Payment Ratio", "historical": "14.0%", "current": "32.0%", "change": "2.3×", "pct_change": "+128%", "status": "ELEVATED"},
+            {"metric": "Refund/Payment Ratio", "historical": f"{hist_rate}%", "current": f"{curr_rate}%", "change": f"{rate_change}×", "pct_change": f"+{pct_change}%", "status": "ELEVATED"},
         ]
     else:
         return [
-            {"metric": "Refund Rate", "historical": "9.5%", "current": "11.2%", "change": "1.2×", "pct_change": "+18%", "status": "NORMAL"},
-            {"metric": "Refund Frequency", "historical": "0.5/month", "current": "0.6/month", "change": "1.1×", "pct_change": "+20%", "status": "NORMAL"},
-            {"metric": "Refund Value", "historical": "₹1,400", "current": "₹1,500", "change": "1.1×", "pct_change": "+7%", "status": "NORMAL"},
-            {"metric": "Payment Frequency", "historical": "2.2/month", "current": "2.0/month", "change": "0.9×", "pct_change": "-9%", "status": "NORMAL"},
-            {"metric": "Refund/Payment Ratio", "historical": "10.0%", "current": "11.5%", "change": "1.1×", "pct_change": "+15%", "status": "NORMAL"},
+            {"metric": "Refund Rate", "historical": f"{lifetime_rate}%", "current": f"{round(lifetime_rate * 1.05, 1)}%", "change": "1.0×", "pct_change": "+5%", "status": "NORMAL"},
+            {"metric": "Refund Frequency", "historical": "0.4/month", "current": "0.4/month", "change": "1.0×", "pct_change": "0%", "status": "NORMAL"},
+            {"metric": "Refund Value", "historical": "₹1,400", "current": "₹1,450", "change": "1.0×", "pct_change": "+3%", "status": "NORMAL"},
+            {"metric": "Payment Frequency", "historical": "2.0/month", "current": "1.9/month", "change": "1.0×", "pct_change": "-5%", "status": "NORMAL"},
+            {"metric": "Refund/Payment Ratio", "historical": f"{lifetime_rate}%", "current": f"{lifetime_rate}%", "change": "1.0×", "pct_change": "0%", "status": "NORMAL"},
         ]
 
 

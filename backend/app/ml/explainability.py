@@ -293,26 +293,68 @@ def generate_decision_summary(
     reasons = []
     trust = []
 
-    r_val = amount if amount is not None else features.get("refund_amount", features.get("return_amount", features.get("amount", 26990.0)))
+    r_val = amount if amount is not None else features.get("refund_amount", features.get("return_amount", features.get("amount", 25000.0)))
+
+    # Extract dynamic metrics from comparison table if available
+    ret_rate = next((m for m in (comparison_metrics or []) if "rate" in m.get("metric", "").lower()), None)
+    ret_freq = next((m for m in (comparison_metrics or []) if "freq" in m.get("metric", "").lower()), None)
+    ret_val = next((m for m in (comparison_metrics or []) if "value" in m.get("metric", "").lower()), None)
+
+    hist_rate = ret_rate.get("historical", "8.2%") if ret_rate else "8.2%"
+    curr_rate = ret_rate.get("current", "61.4%") if ret_rate else "61.4%"
+    rate_change = ret_rate.get("change", "7.5×") if ret_rate else "7.5×"
+
+    hist_freq = ret_freq.get("historical", "0.4/month") if ret_freq else "0.4/mo"
+    curr_freq = ret_freq.get("current", "3.1/month") if ret_freq else "3.1/mo"
+    freq_change = ret_freq.get("change", "7.8×") if ret_freq else "7.8×"
+
+    hist_val = ret_val.get("historical", "₹1,200") if ret_val else "₹1,200"
+
+    has_verified_abuse = features.get("verified_abuse_history", 0) == 1
+    has_burst = features.get("return_burst_flag", 0) == 1
+    high_val = features.get("high_value_concentration", 0) > 0.4 or r_val > 15000
 
     if risk_score >= 70:
-        reasons.append("📈 Return Rate Surged: Rose from a normal 8.2% baseline to 61.4% (now returning 6 out of every 10 purchases).")
-        reasons.append("⚡ Refund Frequency Accelerated: Jumped from once every 2–3 months (0.4/mo) to over 3 refunds per month (almost weekly).")
-        reasons.append(f"💰 High-Ticket Claim Anomaly: Requesting ₹{r_val:,.0f} (far higher than customer's historical typical return of ₹1,200).")
-        reasons.append(f"🚨 Sudden Behavioral Drift: Recent refund activity surged {drift_score:.0f}/100 ({baseline_dev:+.1f}σ deviation from personal norm).")
+        if has_verified_abuse:
+            reasons.append("🚨 Verified Abuse History: Customer has a prior confirmed record of fraudulent returns or chargebacks on file.")
+
+        reasons.append(f"📈 Return Rate Surged: Rose from {hist_rate} baseline to {curr_rate} ({rate_change} change).")
+
+        if has_burst:
+            reasons.append("⚡ Return Burst Detected: Multiple returns submitted within a short 72-hour window.")
+        else:
+            reasons.append(f"⚡ Refund Frequency Accelerated: Shifted from {hist_freq} historically to {curr_freq} ({freq_change} acceleration).")
+
+        if high_val:
+            reasons.append(f"💰 High-Ticket Claim Anomaly: Requesting ₹{r_val:,.0f} (significantly above typical return value of {hist_val}).")
+        else:
+            reasons.append(f"💰 Elevated Claim Exposure: Requesting ₹{r_val:,.0f} posing financial loss risk.")
+
+        if drift_score > 40:
+            reasons.append(f"🚨 Sudden Behavioral Drift: Recent refund behavior scored {drift_score:.0f}/100 ({baseline_dev:+.1f}σ deviation from personal norm).")
     elif risk_score >= 40:
-        reasons.append("📈 Return Rate Elevated: Moderately higher than historical shopping baseline.")
+        if has_verified_abuse:
+            reasons.append("⚠️ Prior Dispute Flag: Past abuse strikes present on customer profile.")
+        reasons.append(f"📈 Return Rate Elevated: Current rate of {curr_rate} exceeds historical {hist_rate}.")
         reasons.append(f"💰 Claim Value: Requesting ₹{r_val:,.0f} requiring secondary invoice verification.")
-        reasons.append(f"⚠️ Moderate Drift: Recent activity shifted {drift_score:.0f}/100 above usual behavior.")
+        if drift_score > 30:
+            reasons.append(f"⚠️ Moderate Drift: Recent activity shifted {drift_score:.0f}/100 above usual behavior.")
     else:
-        reasons.append("✅ Behavior Normal: Return frequency and order value match customer's established baseline.")
-        reasons.append("✅ Safe Transaction: Within expected category and volume parameters.")
+        reasons.append(f"✅ Behavior Within Norms: Return rate ({curr_rate}) and frequency ({curr_freq}) match customer's established baseline.")
+        reasons.append(f"✅ Safe Transaction: ₹{r_val:,.0f} claim within expected category and volume parameters.")
 
     # Trust Signals in simple words
     age = features.get("account_age_days", 310)
-    trust.append(f"🛡️ Established Customer: Account is {int(age)} days old with verified order history (safeguard preventing auto-ban).")
-    if features.get("verified_abuse_history", 0) == 0:
+    if age > 60:
+        trust.append(f"🛡️ Established Customer: Account is {int(age)} days old with verified order history (safeguard preventing auto-ban).")
+    else:
+        trust.append(f"ℹ️ Account Age: Account is {int(age)} days old.")
+
+    if not has_verified_abuse:
         trust.append("🛡️ Clean Record: Zero prior verified fraudulent returns or disputes.")
+    else:
+        trust.append("⚠️ Elevated Scrutiny: Past return dispute documented in customer history.")
+
     trust.append("🛡️ Legitimate Payment: Original transaction was verified and captured on payment gateway.")
 
     # Recommendation in simple words
